@@ -1,0 +1,180 @@
+-- ========================
+-- LOGIN TABLE
+-- ========================
+CREATE TABLE login(
+    username VARCHAR(20) PRIMARY KEY,
+    password VARCHAR(20) NOT NULL
+);
+
+INSERT INTO login VALUES ('admin','admin');
+
+-- ========================
+-- USERS
+-- ========================
+CREATE TABLE users(
+    user_id SERIAL PRIMARY KEY,
+    name VARCHAR(20) NOT NULL,
+    date_of_birth DATE NOT NULL,
+    medical_insurance BOOLEAN,
+    medical_history VARCHAR(50),
+    street VARCHAR(20),
+    city VARCHAR(20),
+    state VARCHAR(20)
+);
+
+-- ========================
+-- USER PHONE
+-- ========================
+CREATE TABLE user_phone_no(
+    user_id INTEGER,
+    phone_no VARCHAR(15),
+    FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- ========================
+-- ORGANIZATION
+-- ========================
+CREATE TABLE organization(
+    organization_id SERIAL PRIMARY KEY,
+    organization_name VARCHAR(20) NOT NULL,
+    location VARCHAR(20),
+    government_approved BOOLEAN
+);
+
+-- ========================
+-- DOCTOR
+-- ========================
+CREATE TABLE doctor(
+    doctor_id SERIAL PRIMARY KEY,
+    doctor_name VARCHAR(20) NOT NULL,
+    department_name VARCHAR(20) NOT NULL,
+    organization_id INTEGER,
+    FOREIGN KEY(organization_id) REFERENCES organization(organization_id) ON DELETE CASCADE
+);
+
+-- ========================
+-- PATIENT
+-- ========================
+CREATE TABLE patient(
+    patient_id SERIAL PRIMARY KEY,
+    organ_req VARCHAR(20),
+    reason_of_procurement VARCHAR(50),
+    doctor_id INTEGER,
+    user_id INTEGER,
+    FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY(doctor_id) REFERENCES doctor(doctor_id) ON DELETE CASCADE
+);
+
+-- ========================
+-- DONOR
+-- ========================
+CREATE TABLE donor(
+    donor_id SERIAL PRIMARY KEY,
+    organ_donated VARCHAR(20),
+    reason_of_donation VARCHAR(50),
+    organization_id INTEGER,
+    user_id INTEGER,
+    FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY(organization_id) REFERENCES organization(organization_id) ON DELETE CASCADE
+);
+
+-- ========================
+-- ORGAN AVAILABLE
+-- ========================
+CREATE TABLE organ_available(
+    organ_id SERIAL PRIMARY KEY,
+    organ_name VARCHAR(20),
+    donor_id INTEGER,
+    FOREIGN KEY(donor_id) REFERENCES donor(donor_id) ON DELETE CASCADE
+);
+
+-- ========================
+-- TRANSACTIONS
+-- ========================
+CREATE TABLE transactions(
+    transaction_id SERIAL PRIMARY KEY,
+    patient_id INTEGER,
+    organ_id INTEGER,
+    donor_id INTEGER,
+    date_of_transaction DATE,
+    status BOOLEAN,
+    FOREIGN KEY(patient_id) REFERENCES patient(patient_id) ON DELETE CASCADE,
+    FOREIGN KEY(donor_id) REFERENCES donor(donor_id) ON DELETE CASCADE
+);
+
+-- ========================
+-- ORGANIZATION PHONE
+-- ========================
+CREATE TABLE organization_phone_no(
+    organization_id INTEGER,
+    phone_no VARCHAR(15),
+    FOREIGN KEY(organization_id) REFERENCES organization(organization_id) ON DELETE CASCADE
+);
+
+-- ========================
+-- DOCTOR PHONE
+-- ========================
+CREATE TABLE doctor_phone_no(
+    doctor_id INTEGER,
+    phone_no VARCHAR(15),
+    FOREIGN KEY(doctor_id) REFERENCES doctor(doctor_id) ON DELETE CASCADE
+);
+
+-- ========================
+-- ORGANIZATION HEAD
+-- ========================
+CREATE TABLE organization_head(
+    organization_id INTEGER,
+    employee_id INTEGER,
+    name VARCHAR(20),
+    date_of_joining DATE,
+    term_length INTEGER,
+    PRIMARY KEY(organization_id, employee_id),
+    FOREIGN KEY(organization_id) REFERENCES organization(organization_id) ON DELETE CASCADE
+);
+
+-- ========================
+-- LOG TABLE
+-- ========================
+CREATE TABLE log (
+    querytime TIMESTAMP,
+    comment VARCHAR(255)
+);
+
+
+-- ORGANIZATION (required first)
+INSERT INTO organization (organization_name, location, government_approved)
+VALUES 
+('Org1','City1',TRUE),
+('Org2','City2',TRUE);
+
+-- USERS
+INSERT INTO users (name, date_of_birth, medical_insurance)
+VALUES 
+('User1','2000-01-01',TRUE),
+('User2','2000-01-02',FALSE);
+
+-- DOCTOR
+INSERT INTO doctor (doctor_name, department_name, organization_id)
+VALUES 
+('Doc1','Cardiology',1),
+('Doc2','Neuro',2);
+
+-- PATIENT
+INSERT INTO patient (organ_req, doctor_id, user_id)
+VALUES 
+('Kidney',1,1);
+
+-- DONOR
+INSERT INTO donor (organ_donated, organization_id, user_id)
+VALUES 
+('Kidney',1,2);
+
+
+
+CREATE TABLE login(
+    username VARCHAR(20) PRIMARY KEY,
+    password VARCHAR(20)
+);
+
+INSERT INTO login VALUES ('admin','admin');
