@@ -24,6 +24,11 @@
             <h1 class="display-4">Organ Procurement and Management System</h1>
         </center>
     </div>
+    {% if error_message %}
+    <div class="alert alert-danger container" role="alert">
+        {{ error_message }}
+    </div>
+    {% endif %}
     {% if not_found == True %}
     <p>Sorry! Not Found</p>
     {% else %}

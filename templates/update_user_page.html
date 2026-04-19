@@ -24,6 +24,11 @@
             <h1 class="display-4">Organ Procurement and Management System</h1>
         </center>
     </div>
+    {% if error_message %}
+    <div class="alert alert-danger container" role="alert">
+        {{ error_message }}
+    </div>
+    {% endif %}
     <form action="/update_user_details" method='POST'>
         <table class="table table-striped table-sm">
             {% for i in range(0,fields | length) %}

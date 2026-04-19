@@ -21,7 +21,9 @@
             <center><h1 class="display-4">Organ Procurement and Donation Management System</h1></center>
         </div>
         {% if error == 'True' %}
-            ERROR
+            <div class="alert alert-danger container" role="alert">
+                {{ error_message or "Could not save this record." }}
+            </div>
         {% endif %}
 
         {% if success == 'True' %}
