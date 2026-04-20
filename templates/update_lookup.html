@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Update {{ display_name }}{% endblock %}
+{% block content %}
+<div class="panel">
+    <h2 class="h5">Find {{ display_name }}</h2>
+    {% if error_messages %}
+    <div class="alert alert-danger" role="alert">
+        <ul class="mb-0">
+            {% for message in error_messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    <form action="/update_{{ alias }}_page" method="POST">
+        {% for field in pk_fields %}
+        <div class="form-group">
+            <label for="{{ field }}">{{ field_label(field) }}</label>
+            <input class="form-control" id="{{ field }}" name="{{ field }}" type="{{ field_input_type(field) }}" value="{{ values.get(field, '') }}" required>
+        </div>
+        {% endfor %}
+        <button class="btn btn-primary" type="submit">Fetch {{ display_name }}</button>
+    </form>
+</div>
+{% endblock %}

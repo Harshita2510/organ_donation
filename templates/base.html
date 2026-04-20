@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Organ Donation Management{% endblock %}</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"></script>
+    <style>
+        body { background: #f7f8fa; }
+        main { padding-bottom: 40px; }
+        .page-header { background: #e9ecef; padding: 28px 16px; margin-bottom: 24px; }
+        .page-header h1 { font-size: 2rem; margin: 0; }
+        .panel { background: #fff; border: 1px solid #dee2e6; border-radius: 6px; padding: 20px; margin-bottom: 18px; }
+        .action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+        .action-grid form, .inline-form { margin: 0; }
+        .table-wrap { overflow-x: auto; background: #fff; border: 1px solid #dee2e6; border-radius: 6px; }
+        .table-wrap table { margin-bottom: 0; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    {% if show_nav|default(True) and session.get('login') %}
+    <nav class="navbar navbar-dark bg-dark justify-content-between">
+        <form class="inline-form" action="/home">
+            <button class="btn btn-outline-primary" type="submit">Home</button>
+        </form>
+        <form class="form-inline" action="/logout">
+            <span class="navbar-text text-white mr-3">Hi {{ session.get('username') }}!</span>
+            <button class="btn btn-outline-success" type="submit">Logout</button>
+        </form>
+    </nav>
+    {% endif %}
+    <main>
+        <div class="page-header text-center">
+            <h1>{% block heading %}Organ Donation and Procurement Management System{% endblock %}</h1>
+        </div>
+        <div class="container-fluid">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+</body>
+</html>

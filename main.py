@@ -1,8 +1,9 @@
 from functools import wraps
+from datetime import date
 
 import psycopg2
 from psycopg2 import sql
-from flask import Flask, render_template, session, request, redirect, url_for
+from flask import Flask, flash, render_template, session, request, redirect, url_for
 
 
 app = Flask(__name__)
@@ -36,99 +37,106 @@ TABLES = {
         "table": "users",
         "pk": ["user_id"],
         "auto_pk": True,
-        "update_template": "update_user_page.html",
-        "delete_template": "remove_user.html",
+        "display": "User",
+        "unique_fields": ["name", "date_of_birth"],
     },
     "users": {
         "table": "users",
         "pk": ["user_id"],
         "auto_pk": True,
-        "update_template": "update_user_page.html",
-        "delete_template": "remove_user.html",
+        "display": "User",
+        "unique_fields": ["name", "date_of_birth"],
     },
     "user_phone_no": {
         "table": "user_phone_no",
         "pk": ["user_id", "phone_no"],
         "auto_pk": False,
+        "display": "User Phone Number",
     },
     "organization": {
         "table": "organization",
         "pk": ["organization_id"],
         "auto_pk": True,
-        "update_template": "update_organization_page.html",
-        "delete_template": "remove_organization.html",
+        "display": "Organization",
     },
     "doctor": {
         "table": "doctor",
         "pk": ["doctor_id"],
         "auto_pk": True,
-        "update_template": "update_doctor_page.html",
-        "delete_template": "remove_doctor.html",
+        "display": "Doctor",
     },
     "doctor_phone_no": {
         "table": "doctor_phone_no",
         "pk": ["doctor_id", "phone_no"],
         "auto_pk": False,
+        "display": "Doctor Phone Number",
     },
     "patient": {
         "table": "patient",
         "pk": ["patient_id"],
         "auto_pk": True,
-        "update_template": "update_patient_page.html",
-        "delete_template": "remove_patient.html",
+        "display": "Patient",
     },
     "donor": {
         "table": "donor",
         "pk": ["donor_id"],
         "auto_pk": True,
-        "update_template": "update_donor_page.html",
-        "delete_template": "remove_donor.html",
+        "display": "Donor",
     },
     "organ": {
         "table": "organ_available",
         "pk": ["organ_id"],
         "auto_pk": True,
+        "display": "Organ",
     },
     "organ_available": {
         "table": "organ_available",
         "pk": ["organ_id"],
         "auto_pk": True,
+        "display": "Organ",
     },
     "organization_phone_no": {
         "table": "organization_phone_no",
         "pk": ["organization_id", "phone_no"],
         "auto_pk": False,
+        "display": "Organization Phone Number",
     },
     "organization_head": {
         "table": "organization_head",
         "pk": ["organization_id", "employee_id"],
         "auto_pk": False,
-        "update_template": "update_organization_head_page.html",
-        "delete_template": "remove_organization_head.html",
+        "display": "Organization Head",
     },
     "transaction": {
         "table": "transactions",
         "pk": ["transaction_id"],
         "auto_pk": True,
+        "display": "Transaction",
     },
     "transactions": {
         "table": "transactions",
         "pk": ["transaction_id"],
         "auto_pk": True,
+        "display": "Transaction",
     },
     "log": {
         "table": "log",
         "pk": [],
         "auto_pk": False,
+        "display": "Log",
     },
 }
 
 BOOLEAN_FIELDS = {"medical_insurance", "government_approved", "status"}
+INTEGER_TYPES = {"smallint", "integer", "bigint"}
+DATE_TYPES = {"date"}
 
 
 def database_error_message(error):
     if isinstance(error, psycopg2.errors.StringDataRightTruncation):
         return "One of the values is longer than the database column allows."
+    if isinstance(error, psycopg2.errors.UniqueViolation):
+        return "A record with these unique details already exists."
     if isinstance(error, psycopg2.errors.ForeignKeyViolation):
         return "A related ID does not exist. Add the referenced record first."
     if isinstance(error, psycopg2.errors.NotNullViolation):
@@ -136,6 +144,29 @@ def database_error_message(error):
     if isinstance(error, psycopg2.errors.InvalidTextRepresentation):
         return "One of the values has the wrong format for its column."
     return str(error).splitlines()[0]
+
+
+def field_label(field):
+    return field.replace("_", " ").title()
+
+
+def field_input_type(field):
+    if field in BOOLEAN_FIELDS:
+        return "checkbox"
+    if field.endswith("_id") or field in {"employee_id", "term_length"}:
+        return "number"
+    if "date" in field:
+        return "date"
+    return "text"
+
+
+@app.context_processor
+def template_helpers():
+    return {
+        "boolean_fields": BOOLEAN_FIELDS,
+        "field_input_type": field_input_type,
+        "field_label": field_label,
+    }
 
 
 def get_config(alias):
@@ -157,6 +188,41 @@ def get_columns(table):
         conn.close()
 
 
+def get_column_info(table):
+    conn, cur = get_cursor()
+    try:
+        cur.execute(
+            """
+            SELECT column_name, data_type, is_nullable, character_maximum_length
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = %s
+            ORDER BY ordinal_position
+            """,
+            (table,),
+        )
+        return {
+            name: {
+                "data_type": data_type,
+                "nullable": nullable == "YES",
+                "max_length": max_length,
+            }
+            for name, data_type, nullable, max_length in cur.fetchall()
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_raw_form_value(column):
+    for key in request.form.keys():
+        if key.lower() == column.lower():
+            values = request.form.getlist(key)
+            if not values:
+                return None
+            return values[-1].strip()
+    return None
+
+
 def normalize_form_value(column, value):
     if value == "":
         return None
@@ -166,10 +232,64 @@ def normalize_form_value(column, value):
 
 
 def get_form_value(column):
-    for key, value in request.form.items():
-        if key.lower() == column.lower():
-            return normalize_form_value(column, value)
-    return None
+    value = get_raw_form_value(column)
+    if value is None:
+        return None
+    return normalize_form_value(column, value)
+
+
+def validate_boolean(column, raw_value):
+    if raw_value is None or raw_value == "":
+        return True
+    return raw_value.lower() in {"1", "0", "true", "false", "yes", "no", "on", "off"}
+
+
+def validate_form(config, columns, mode):
+    metadata = get_column_info(config["table"])
+    errors = []
+
+    for column in columns:
+        if mode == "insert" and config["auto_pk"] and column in config["pk"]:
+            continue
+
+        raw_value = get_raw_form_value(column)
+        value = get_form_value(column)
+        info = metadata.get(column, {})
+        label = field_label(column)
+        is_required = not info.get("nullable", True)
+
+        if mode == "update" and column in config["pk"]:
+            is_required = True
+
+        if is_required and value is None:
+            errors.append(f"{label} is required.")
+            continue
+
+        if value is None:
+            continue
+
+        data_type = info.get("data_type")
+        max_length = info.get("max_length")
+
+        if data_type in INTEGER_TYPES:
+            try:
+                int(value)
+            except (TypeError, ValueError):
+                errors.append(f"{label} must be a number.")
+
+        if data_type in DATE_TYPES:
+            try:
+                date.fromisoformat(str(value))
+            except ValueError:
+                errors.append(f"{label} must be a valid date.")
+
+        if column in BOOLEAN_FIELDS and not validate_boolean(column, raw_value):
+            errors.append(f"{label} must be true/false or 1/0.")
+
+        if max_length and isinstance(value, str) and len(value) > max_length:
+            errors.append(f"{label} must be {max_length} characters or fewer.")
+
+    return errors
 
 
 def fetch_all(config):
@@ -241,16 +361,50 @@ def insert_row(config, columns):
         conn.close()
 
 
+def duplicate_row_exists(config, columns, exclude_pk_values=None):
+    compare_columns = config.get("unique_fields") or [
+        column
+        for column in columns
+        if not (config["auto_pk"] and column in config["pk"])
+    ]
+    values = [get_form_value(column) for column in compare_columns]
+    where_clause = sql.SQL(" AND ").join(
+        sql.SQL("{} IS NOT DISTINCT FROM %s").format(sql.Identifier(column))
+        for column in compare_columns
+    )
+
+    if exclude_pk_values:
+        pk_clause = sql.SQL(" AND ").join(
+            sql.SQL("{} <> %s").format(sql.Identifier(column))
+            for column in config["pk"]
+        )
+        where_clause = sql.SQL("({}) AND ({})").format(where_clause, pk_clause)
+        values += exclude_pk_values
+
+    conn, cur = get_cursor()
+    try:
+        cur.execute(
+            sql.SQL("SELECT 1 FROM {} WHERE {} LIMIT 1").format(
+                sql.Identifier(config["table"]), where_clause
+            ),
+            values,
+        )
+        return cur.fetchone() is not None
+    finally:
+        cur.close()
+        conn.close()
+
+
 def update_row(config, columns):
     pk_values = [get_form_value(column) for column in config["pk"]]
     update_columns = [
         column
         for column in columns
-        if column not in config["pk"] and get_form_value(column) is not None
+        if column not in config["pk"] and get_raw_form_value(column) is not None
     ]
 
     if not update_columns or any(value is None for value in pk_values):
-        return
+        return 0
 
     assignments = sql.SQL(", ").join(
         sql.SQL("{} = %s").format(sql.Identifier(column)) for column in update_columns
@@ -268,7 +422,9 @@ def update_row(config, columns):
             ),
             values,
         )
+        rowcount = cur.rowcount
         conn.commit()
+        return rowcount
     except Exception:
         conn.rollback()
         raise
@@ -280,7 +436,7 @@ def update_row(config, columns):
 def delete_row(config):
     pk_values = [get_form_value(column) for column in config["pk"]]
     if any(value is None for value in pk_values):
-        return
+        return 0
 
     where_clause = sql.SQL(" AND ").join(
         sql.SQL("{} = %s").format(sql.Identifier(column)) for column in config["pk"]
@@ -293,7 +449,9 @@ def delete_row(config):
             ),
             pk_values,
         )
+        rowcount = cur.rowcount
         conn.commit()
+        return rowcount
     except Exception:
         conn.rollback()
         raise
@@ -304,29 +462,70 @@ def delete_row(config):
 
 def render_table(config):
     rows, fields = fetch_all(config)
-    return render_template("search_and_show_list.html", res=rows, fields=fields)
+    return render_template(
+        "search_and_show_list.html",
+        res=rows,
+        fields=fields,
+        title=f"{config.get('display', config['table']).title()} Details",
+    )
 
 
-def render_add_page(alias, error_message=None):
+def render_add_page(alias, error_messages=None):
     config = get_config(alias)
     fields = get_columns(config["table"])
     if config["auto_pk"]:
         fields = [field for field in fields if field not in config["pk"]]
+    metadata = get_column_info(config["table"])
+    required_fields = [
+        field
+        for field in fields
+        if not metadata.get(field, {}).get("nullable", True)
+    ]
     return render_template(
         "add_page.html",
         id=alias.lower(),
+        display_name=config.get("display", alias).title(),
         fields=fields,
-        error="True" if error_message else "False",
-        error_message=error_message,
+        required_fields=required_fields,
+        error_messages=error_messages or [],
+    )
+
+
+def render_update_lookup(alias, error_messages=None, values=None):
+    config = get_config(alias)
+    return render_template(
+        "update_lookup.html",
+        alias=alias.lower(),
+        display_name=config.get("display", alias).title(),
+        pk_fields=config["pk"],
+        error_messages=error_messages or [],
+        values=values or {},
+    )
+
+
+def render_update_form(alias, fields, row, error_messages=None):
+    config = get_config(alias)
+    metadata = get_column_info(config["table"])
+    required_fields = [
+        field
+        for field in fields
+        if field in config["pk"] or not metadata.get(field, {}).get("nullable", True)
+    ]
+    values = dict(zip(fields, row))
+    return render_template(
+        "update_form.html",
+        alias=alias.lower(),
+        display_name=config.get("display", alias).title(),
+        fields=fields,
+        pk_fields=config["pk"],
+        required_fields=required_fields,
+        values=values,
+        error_messages=error_messages or [],
     )
 
 
 def render_update_page(alias):
-    config = get_config(alias)
-    fields = get_columns(config["table"])
-    template = config.get("update_template", "update_detail.html")
-    empty_values = [""] * len(fields)
-    return render_template(template, fields=fields, res=empty_values)
+    return render_update_lookup(alias)
 
 
 # ================= HOME =================
@@ -404,11 +603,15 @@ def show_update_detail():
         return render_template("show_detail.html", not_found=True)
 
     if "delete" in request.form:
-        delete_row(config)
+        deleted = delete_row(config)
+        if deleted:
+            flash("User deleted successfully.", "success")
+        else:
+            flash("User was not found.", "warning")
         return redirect(url_for("show_users"))
 
     if "update" in request.form:
-        return render_template("update_detail.html", fields=fields, res=row)
+        return render_update_form("user", fields, row)
 
     conn, cur = get_cursor()
     try:
@@ -466,10 +669,22 @@ def add_row(alias):
     config = get_config(alias)
     if request.method == "POST":
         fields = get_columns(config["table"])
+        validation_errors = validate_form(config, fields, "insert")
+        if validation_errors:
+            return render_add_page(alias, validation_errors), 400
+        if config.get("unique_fields") and duplicate_row_exists(config, fields):
+            return (
+                render_add_page(
+                    alias,
+                    [f"A {config.get('display', 'record').lower()} with these unique details already exists."],
+                ),
+                400,
+            )
         try:
             insert_row(config, fields)
         except psycopg2.Error as error:
-            return render_add_page(alias, database_error_message(error)), 400
+            return render_add_page(alias, [database_error_message(error)]), 400
+        flash(f"{config.get('display', alias).title()} added successfully.", "success")
         return render_table(config)
     return render_add_page(alias)
 
@@ -478,6 +693,25 @@ def add_row(alias):
 @app.route("/update_<alias>_page", methods=["GET", "POST"])
 @login_required
 def update_page(alias):
+    config = get_config(alias)
+    if request.method == "POST" and any(get_raw_form_value(field) for field in config["pk"]):
+        pk_values = [get_form_value(field) for field in config["pk"]]
+        if any(value is None for value in pk_values):
+            return render_update_lookup(
+                alias,
+                ["Enter every ID field before fetching the record."],
+                {field: get_raw_form_value(field) or "" for field in config["pk"]},
+            ), 400
+
+        row, fields = fetch_one(config, pk_values)
+        if row is None:
+            return render_update_lookup(
+                alias,
+                [f"{config.get('display', alias).title()} was not found."],
+                {field: get_raw_form_value(field) or "" for field in config["pk"]},
+            ), 404
+        return render_update_form(alias, fields, row)
+
     return render_update_page(alias)
 
 
@@ -485,19 +719,40 @@ def update_page(alias):
 @login_required
 def update_details_for_alias(alias):
     config = get_config(alias)
-    try:
-        update_row(config, get_columns(config["table"]))
-    except psycopg2.Error as error:
-        fields = get_columns(config["table"])
+    fields = get_columns(config["table"])
+    validation_errors = validate_form(config, fields, "update")
+    pk_values = [get_form_value(field) for field in config["pk"]]
+    if config.get("unique_fields") and not validation_errors:
+        if duplicate_row_exists(config, fields, exclude_pk_values=pk_values):
+            validation_errors.append(
+                f"A {config.get('display', 'record').lower()} with these unique details already exists."
+            )
+    if validation_errors:
         return (
-            render_template(
-                config.get("update_template", "update_detail.html"),
-                fields=fields,
-                res=[get_form_value(field) or "" for field in fields],
-                error_message=database_error_message(error),
+            render_update_form(
+                alias,
+                fields,
+                [get_form_value(field) for field in fields],
+                validation_errors,
             ),
             400,
         )
+    try:
+        updated = update_row(config, fields)
+    except psycopg2.Error as error:
+        return (
+            render_update_form(
+                alias,
+                fields=fields,
+                row=[get_form_value(field) for field in fields],
+                error_messages=[database_error_message(error)],
+            ),
+            400,
+        )
+    if updated:
+        flash(f"{config.get('display', alias).title()} updated successfully.", "success")
+    else:
+        flash(f"{config.get('display', alias).title()} was not found.", "warning")
     return render_table(config)
 
 
@@ -505,19 +760,37 @@ def update_details_for_alias(alias):
 @login_required
 def update_details():
     config = get_config("user")
-    try:
-        update_row(config, get_columns(config["table"]))
-    except psycopg2.Error as error:
-        fields = get_columns(config["table"])
+    fields = get_columns(config["table"])
+    validation_errors = validate_form(config, fields, "update")
+    pk_values = [get_form_value(field) for field in config["pk"]]
+    if not validation_errors and duplicate_row_exists(config, fields, exclude_pk_values=pk_values):
+        validation_errors.append("A user with these unique details already exists.")
+    if validation_errors:
         return (
-            render_template(
-                "update_detail.html",
-                fields=fields,
-                res=[get_form_value(field) or "" for field in fields],
-                error_message=database_error_message(error),
+            render_update_form(
+                "user",
+                fields,
+                [get_form_value(field) for field in fields],
+                validation_errors,
             ),
             400,
         )
+    try:
+        updated = update_row(config, fields)
+    except psycopg2.Error as error:
+        return (
+            render_update_form(
+                "user",
+                fields,
+                [get_form_value(field) for field in fields],
+                [database_error_message(error)],
+            ),
+            400,
+        )
+    if updated:
+        flash("User updated successfully.", "success")
+    else:
+        flash("User was not found.", "warning")
     return redirect(url_for("show_users"))
 
 
@@ -526,7 +799,12 @@ def update_details():
 @login_required
 def remove_page(alias):
     config = get_config(alias)
-    return render_template(config["delete_template"])
+    return render_template(
+        "remove_page.html",
+        alias=alias.lower(),
+        display_name=config.get("display", alias).title(),
+        pk_fields=config["pk"],
+    )
 
 
 @app.route("/del_<alias>", methods=["POST"])
@@ -534,9 +812,19 @@ def remove_page(alias):
 def delete_details(alias):
     config = get_config(alias)
     try:
-        delete_row(config)
+        deleted = delete_row(config)
     except psycopg2.Error as error:
-        return database_error_message(error), 400
+        flash(database_error_message(error), "danger")
+        return render_template(
+            "remove_page.html",
+            alias=alias.lower(),
+            display_name=config.get("display", alias).title(),
+            pk_fields=config["pk"],
+        ), 400
+    if deleted:
+        flash(f"{config.get('display', alias).title()} deleted successfully.", "success")
+    else:
+        flash(f"{config.get('display', alias).title()} was not found.", "warning")
     return render_table(config)
 
 

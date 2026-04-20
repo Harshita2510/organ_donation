@@ -19,7 +19,8 @@ CREATE TABLE users(
     medical_history VARCHAR(255),
     street VARCHAR(100),
     city VARCHAR(100),
-    state VARCHAR(100)
+    state VARCHAR(100),
+    CONSTRAINT users_unique_identity UNIQUE (name, date_of_birth)
 );
 
 -- ========================

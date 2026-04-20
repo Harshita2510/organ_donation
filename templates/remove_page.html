@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Remove {{ display_name }}{% endblock %}
+{% block content %}
+<div class="panel">
+    <h2 class="h5">Remove {{ display_name }}</h2>
+    <form action="/del_{{ alias }}" method="POST">
+        {% for field in pk_fields %}
+        <div class="form-group">
+            <label for="{{ field }}">{{ field_label(field) }}</label>
+            <input class="form-control" id="{{ field }}" name="{{ field }}" type="{{ field_input_type(field) }}" required>
+        </div>
+        {% endfor %}
+        <button class="btn btn-danger" type="submit">Delete {{ display_name }}</button>
+    </form>
+</div>
+{% endblock %}

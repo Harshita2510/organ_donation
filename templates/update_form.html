@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Add {{ display_name }}{% endblock %}
+{% block title %}Update {{ display_name }}{% endblock %}
 {% block content %}
 <div class="panel">
-    <h2 class="h5">Add {{ display_name }}</h2>
+    <h2 class="h5">Update {{ display_name }}</h2>
     {% if error_messages %}
     <div class="alert alert-danger" role="alert">
         <ul class="mb-0">
@@ -12,22 +12,22 @@
         </ul>
     </div>
     {% endif %}
-    <form action="/add_{{ id }}" method="POST">
+    <form action="/update_{{ alias }}_details" method="POST">
         {% for field in fields %}
         <div class="form-group">
             <label for="{{ field }}">{{ field_label(field) }}</label>
             {% if field in boolean_fields %}
             <input type="hidden" name="{{ field }}" value="0">
             <div class="custom-control custom-checkbox">
-                <input class="custom-control-input" type="checkbox" id="{{ field }}" name="{{ field }}" value="1">
+                <input class="custom-control-input" type="checkbox" id="{{ field }}" name="{{ field }}" value="1" {% if values.get(field) %}checked{% endif %} {% if field in pk_fields %}readonly{% endif %}>
                 <label class="custom-control-label" for="{{ field }}">Yes</label>
             </div>
             {% else %}
-            <input class="form-control" id="{{ field }}" name="{{ field }}" type="{{ field_input_type(field) }}" {% if field in required_fields %}required{% endif %}>
+            <input class="form-control" id="{{ field }}" name="{{ field }}" type="{{ field_input_type(field) }}" value="{{ values.get(field, '') }}" {% if field in pk_fields %}readonly{% endif %} {% if field in required_fields %}required{% endif %}>
             {% endif %}
         </div>
         {% endfor %}
-        <button class="btn btn-success" type="submit">Add {{ display_name }}</button>
+        <button class="btn btn-success" type="submit">Save Changes</button>
     </form>
 </div>
 {% endblock %}
